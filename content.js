@@ -29,8 +29,6 @@ class ArxivCitationCounter {
   findGoogleScholarLink() {
     // Look for the Google Scholar link in the References & Citations section
     const scholarLink = document.querySelector('a.cite-google-scholar');
-    console.log('Google Scholar link found:', scholarLink);
-    console.log('Google Scholar link href:', scholarLink ? scholarLink.href : 'None');
     if (scholarLink && scholarLink.href) {
       return scholarLink.href;
     }
@@ -52,11 +50,9 @@ class ArxivCitationCounter {
       if (response.success) {
         return response.count;
       } else {
-        console.warn('Background script failed:', response.error);
         return null;
       }
     } catch (error) {
-      console.warn('Failed to communicate with background script:', error);
       return null;
     }
   }
@@ -119,7 +115,6 @@ class ArxivCitationCounter {
   async addCitationCounter() {
     const metaTable = document.querySelector('.metatable table');
     if (!metaTable) {
-      console.warn('Could not find metatable on arXiv page');
       return;
     }
 

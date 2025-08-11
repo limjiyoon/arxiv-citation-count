@@ -1,7 +1,12 @@
 // Background script to handle Google Scholar requests (bypasses CORS)
+
+// Cache for storing citation counts (expires after 1 hour)
+const citationCache = new Map();
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'fetchCitations') {
-    fetchCitationCount(request.scholarUrl)
+    getCachedOrFetchCitationCount(request.scholarUrl)
       .then(count => sendResponse({ success: true, count }))
       .catch(error => sendResponse({ success: false, error: error.message }));
 
@@ -9,6 +14,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+async function getCachedOrFetchCitationCount(scholarUrl) {
+  // Check cache first
+  const cacheKey = scholarUrl;
+  const cached = citationCache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    return cached.count;
+  }
+  
+  // Fetch fresh data
+  const count = await fetchCitationCount(scholarUrl);
+  
+  // Cache the result
+  citationCache.set(cacheKey, {
+    count: count,
+    timestamp: Date.now()
+  });
+  
+  // Clean up expired cache entries periodically
+  cleanExpiredCache();
+  
+  return count;
+}
+
+function cleanExpiredCache() {
+  const now = Date.now();
+  for (const [key, value] of citationCache.entries()) {
+    if (now - value.timestamp >= CACHE_DURATION) {
+      citationCache.delete(key);
+    }
+  }
+}
 
 async function fetchCitationCount(scholarUrl) {
   try {
@@ -27,10 +65,16 @@ async function fetchCitationCount(scholarUrl) {
     }
 
     const html = await response.text();
+    
+    // Protect against very large HTML responses (ReDoS protection)
+    if (html.length > 1000000) { // 1MB limit
+      throw new Error('Response too large to process safely');
+    }
+    
     return parseCitationCount(html);
   } catch (error) {
-    console.warn('Background script citation fetch failed:', error);
-    throw error;
+    // Avoid logging potentially sensitive error information
+    throw new Error('Citation fetch failed');
   }
 }
 

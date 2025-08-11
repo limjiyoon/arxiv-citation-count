@@ -5,8 +5,8 @@
 }
 
 .citation-count {
-  font-weight: 700;
-  color: #007bff;
+  font-weight: 500;
+  color: #000000;
 }
 
 .citation-count.error {
@@ -15,7 +15,6 @@
 }
 
 .citation-source {
-  font-size: 12px;
   color: #6c757d;
   font-style: italic;
 }
