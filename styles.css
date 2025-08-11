@@ -1,32 +1,12 @@
-.citation-counter {
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 4px;
-  padding: 8px 12px;
-  margin: 8px 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.citation-counter.loading {
-  background-color: #fff3cd;
-  border-color: #ffeaa7;
-}
-
-.citation-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.citation-label {
-  font-weight: 600;
-  color: #495057;
+/* Citation counter table row styling */
+#arxiv-citation-counter td.tablecell,
+#arxiv-citation-loading td.tablecell {
+  padding: 4px 0;
 }
 
 .citation-count {
   font-weight: 700;
   color: #007bff;
-  font-size: 16px;
 }
 
 .citation-count.error {
@@ -40,7 +20,7 @@
   font-style: italic;
 }
 
-.loading .citation-count {
+.citation-count.loading {
   color: #856404;
   animation: pulse 1.5s ease-in-out infinite;
 }

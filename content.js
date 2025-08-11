@@ -12,7 +12,7 @@ class ArxivCitationCounter {
   }
 
   isArxivPage() {
-    return window.location.hostname === 'arxiv.org' && 
+    return window.location.hostname === 'arxiv.org' &&
            window.location.pathname.includes('/abs/');
   }
 
@@ -26,86 +26,80 @@ class ArxivCitationCounter {
     });
   }
 
-  extractArxivId() {
-    const pathMatch = window.location.pathname.match(/\/abs\/(.+)$/);
-    return pathMatch ? pathMatch[1] : null;
-  }
-
-  extractPaperTitle() {
-    const titleElement = document.querySelector('h1.title');
-    if (titleElement) {
-      return titleElement.textContent.replace('Title:', '').trim();
+  findGoogleScholarLink() {
+    // Look for the Google Scholar link in the References & Citations section
+    const scholarLink = document.querySelector('a.cite-google-scholar');
+    console.log('Google Scholar link found:', scholarLink);
+    console.log('Google Scholar link href:', scholarLink ? scholarLink.href : 'None');
+    if (scholarLink && scholarLink.href) {
+      return scholarLink.href;
     }
     return null;
   }
 
-  extractAuthors() {
-    const authorsElement = document.querySelector('.authors');
-    if (authorsElement) {
-      return authorsElement.textContent.replace('Authors:', '').trim();
-    }
-    return null;
-  }
-
-  async fetchCitationCount(title, authors) {
+  async fetchCitationCount(scholarUrl) {
     try {
-      const query = this.buildScholarQuery(title, authors);
-      const response = await fetch(`https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch from Google Scholar');
+      if (!scholarUrl) {
+        return null;
       }
-      
-      const html = await response.text();
-      return this.parseCitationCount(html);
+
+      // Use background script to bypass CORS
+      const response = await chrome.runtime.sendMessage({
+        action: 'fetchCitations',
+        scholarUrl: scholarUrl
+      });
+
+      if (response.success) {
+        return response.count;
+      } else {
+        console.warn('Background script failed:', response.error);
+        return null;
+      }
     } catch (error) {
-      console.error('Error fetching citation count:', error);
+      console.warn('Failed to communicate with background script:', error);
       return null;
     }
   }
 
-  buildScholarQuery(title, authors) {
-    let query = `"${title}"`;
-    if (authors) {
-      const firstAuthor = authors.split(',')[0].trim();
-      query += ` author:"${firstAuthor}"`;
-    }
-    return query;
-  }
-
-  parseCitationCount(html) {
-    const citedByRegex = /Cited by (\d+)/;
-    const match = html.match(citedByRegex);
-    return match ? parseInt(match[1]) : 0;
-  }
 
   createCitationElement(count) {
-    const citationDiv = document.createElement('div');
-    citationDiv.id = 'arxiv-citation-counter';
-    citationDiv.className = 'citation-counter';
-    
+    const citationRow = document.createElement('tr');
+    citationRow.id = 'arxiv-citation-counter';
+
+    // Create label cell
+    const labelCell = document.createElement('td');
+    labelCell.className = 'tablecell label';
+    labelCell.textContent = 'Citations:';
+
+    // Create content cell
+    const contentCell = document.createElement('td');
+    contentCell.className = 'tablecell';
+
     if (count === null) {
-      citationDiv.innerHTML = `
-        <div class="citation-info">
-          <span class="citation-label">Citations:</span>
-          <span class="citation-count error">Unable to fetch</span>
-        </div>
-      `;
+      const errorSpan = document.createElement('span');
+      errorSpan.className = 'citation-count error';
+      errorSpan.textContent = 'Service unavailable';
+      contentCell.appendChild(errorSpan);
     } else {
-      citationDiv.innerHTML = `
-        <div class="citation-info">
-          <span class="citation-label">Citations:</span>
-          <span class="citation-count">${count}</span>
-          <span class="citation-source">(Google Scholar)</span>
-        </div>
-      `;
+      // Sanitize count to ensure it's a safe integer
+      const sanitizedCount = Number.isInteger(count) && count >= 0 ? count : 0;
+
+      const countSpan = document.createElement('span');
+      countSpan.className = 'citation-count';
+      countSpan.textContent = sanitizedCount.toString();
+
+      const sourceSpan = document.createElement('span');
+      sourceSpan.className = 'citation-source';
+      sourceSpan.textContent = ' (Google Scholar)';
+
+      contentCell.appendChild(countSpan);
+      contentCell.appendChild(sourceSpan);
     }
-    
-    return citationDiv;
+
+    citationRow.appendChild(labelCell);
+    citationRow.appendChild(contentCell);
+
+    return citationRow;
   }
 
   findCiteAsField() {
@@ -114,8 +108,8 @@ class ArxivCitationCounter {
 
     const rows = metaTable.querySelectorAll('tr');
     for (let row of rows) {
-      const th = row.querySelector('th');
-      if (th && th.textContent.includes('Cite as:')) {
+      const labelCell = row.querySelector('td.tablecell.label');
+      if (labelCell && labelCell.textContent.includes('Cite as:')) {
         return row;
       }
     }
@@ -123,42 +117,54 @@ class ArxivCitationCounter {
   }
 
   async addCitationCounter() {
-    const citeAsRow = this.findCiteAsField();
-    if (!citeAsRow) {
-      console.warn('Could not find cite-as field on arXiv page');
+    const metaTable = document.querySelector('.metatable table');
+    if (!metaTable) {
+      console.warn('Could not find metatable on arXiv page');
       return;
     }
 
     const loadingElement = this.createLoadingElement();
-    citeAsRow.parentNode.insertBefore(loadingElement, citeAsRow.nextSibling);
+    metaTable.appendChild(loadingElement);
 
-    const title = this.extractPaperTitle();
-    const authors = this.extractAuthors();
-    
-    if (!title) {
+    const scholarUrl = this.findGoogleScholarLink();
+
+    if (!scholarUrl) {
       loadingElement.remove();
-      console.warn('Could not extract paper title');
+      const errorElement = this.createCitationElement(null);
+      metaTable.appendChild(errorElement);
       return;
     }
 
-    const citationCount = await this.fetchCitationCount(title, authors);
+    const citationCount = await this.fetchCitationCount(scholarUrl);
     const citationElement = this.createCitationElement(citationCount);
-    
+
     loadingElement.remove();
-    citeAsRow.parentNode.insertBefore(citationElement, citeAsRow.nextSibling);
+    metaTable.appendChild(citationElement);
   }
 
   createLoadingElement() {
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'arxiv-citation-loading';
-    loadingDiv.className = 'citation-counter loading';
-    loadingDiv.innerHTML = `
-      <div class="citation-info">
-        <span class="citation-label">Citations:</span>
-        <span class="citation-count">Loading...</span>
-      </div>
-    `;
-    return loadingDiv;
+    const loadingRow = document.createElement('tr');
+    loadingRow.id = 'arxiv-citation-loading';
+    loadingRow.className = 'loading';
+
+    // Create label cell
+    const labelCell = document.createElement('td');
+    labelCell.className = 'tablecell label';
+    labelCell.textContent = 'Citations:';
+
+    // Create content cell
+    const contentCell = document.createElement('td');
+    contentCell.className = 'tablecell';
+
+    const loadingSpan = document.createElement('span');
+    loadingSpan.className = 'citation-count loading';
+    loadingSpan.textContent = 'Loading...';
+
+    contentCell.appendChild(loadingSpan);
+    loadingRow.appendChild(labelCell);
+    loadingRow.appendChild(contentCell);
+
+    return loadingRow;
   }
 }
 
