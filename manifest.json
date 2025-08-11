@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "arXiv Citation Counter",
+  "version": "1.0.0",
+  "description": "Display Google Scholar citation counts on arXiv paper pages",
+  
+  "permissions": [
+    "activeTab"
+  ],
+  
+  "host_permissions": [
+    "https://arxiv.org/*",
+    "https://scholar.google.com/*"
+  ],
+  
+  "content_scripts": [
+    {
+      "matches": ["https://arxiv.org/abs/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["https://arxiv.org/*"]
+    }
+  ]
+}
